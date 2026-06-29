@@ -7,13 +7,12 @@ const os = require('os');
 const uuid = require('uuid');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static('.')); // Serve static files (index.html, etc.)
 
-// Create temp directory for video processing
 const TEMP_DIR = path.join(os.tmpdir(), 'chargebee-shorts');
 const OUTPUT_DIR = path.join(TEMP_DIR, 'outputs');
 
@@ -24,7 +23,6 @@ if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
-// Helper: Convert time string to seconds
 function timeToSeconds(timeStr) {
   const parts = timeStr.split(':');
   if (parts.length === 2) {
@@ -35,7 +33,6 @@ function timeToSeconds(timeStr) {
   return 0;
 }
 
-// Helper: Run shell command
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {
     const process = spawn(command, args);
@@ -64,7 +61,6 @@ function runCommand(command, args) {
   });
 }
 
-// Endpoint: Process YouTube video
 app.post('/api/process-video', async (req, res) => {
   try {
     const { videoUrl, clips } = req.body;
@@ -83,10 +79,8 @@ app.post('/api/process-video', async (req, res) => {
       message: 'Video processing started'
     });
 
-    // Process in background
     processVideoAsync(videoUrl, clips, jobId, jobDir).catch(err => {
       console.error(`Job ${jobId} failed:`, err);
-      // Store error for client to check
       fs.writeFileSync(
         path.join(jobDir, 'error.json'),
         JSON.stringify({ error: err.message })
@@ -98,13 +92,11 @@ app.post('/api/process-video', async (req, res) => {
   }
 });
 
-// Background video processing
 async function processVideoAsync(videoUrl, clips, jobId, jobDir) {
   const videoPath = path.join(jobDir, 'original.mp4');
   const outputClips = [];
 
   try {
-    // Step 1: Download video
     console.log(`[${jobId}] Downloading video...`);
     await runCommand('yt-dlp', [
       videoUrl,
@@ -112,7 +104,6 @@ async function processVideoAsync(videoUrl, clips, jobId, jobDir) {
       '-o', videoPath
     ]);
 
-    // Step 2: Process each clip
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
       const clipName = `${clip.title || `clip-${i}`}`.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -124,8 +115,6 @@ async function processVideoAsync(videoUrl, clips, jobId, jobDir) {
       const endSec = timeToSeconds(clip.end);
       const duration = endSec - startSec;
 
-      // FFmpeg: Extract segment and resize to 9:16 (1080x1920)
-      // Scale to 1080x1920 with aspect ratio preservation, then pad
       await runCommand('ffmpeg', [
         '-i', videoPath,
         '-ss', String(startSec),
@@ -145,7 +134,6 @@ async function processVideoAsync(videoUrl, clips, jobId, jobDir) {
       });
     }
 
-    // Save job metadata
     fs.writeFileSync(
       path.join(jobDir, 'status.json'),
       JSON.stringify({
@@ -162,7 +150,6 @@ async function processVideoAsync(videoUrl, clips, jobId, jobDir) {
   }
 }
 
-// Endpoint: Check job status
 app.get('/api/status/:jobId', (req, res) => {
   try {
     const { jobId } = req.params;
@@ -192,14 +179,12 @@ app.get('/api/status/:jobId', (req, res) => {
   }
 });
 
-// Endpoint: Download clip
 app.get('/api/download/:jobId/:filename', (req, res) => {
   try {
     const { jobId, filename } = req.params;
     const jobDir = path.join(TEMP_DIR, jobId);
     const filePath = path.join(jobDir, filename);
 
-    // Security: Prevent directory traversal
     if (!filePath.startsWith(jobDir)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -215,7 +200,6 @@ app.get('/api/download/:jobId/:filename', (req, res) => {
   }
 });
 
-// Endpoint: Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
