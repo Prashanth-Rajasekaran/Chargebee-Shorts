@@ -20,7 +20,7 @@ COPY package.json ./
 
 RUN npm install --production --legacy-peer-deps
 
-COPY youtube-shorts-backend-FINAL.js youtube-shorts-backend.js
+COPY youtube-shorts-backend.js youtube-shorts-backend.js
 
 RUN mkdir -p /tmp/chargebee-shorts
 
